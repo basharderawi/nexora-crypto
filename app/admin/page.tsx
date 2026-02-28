@@ -39,6 +39,13 @@ type AppSettings = {
   updated_at: string;
 } | null;
 
+/** Row shape for app_settings table (for typed updates) */
+type AppSettingsRow = {
+  id: number;
+  sell_price_ils_per_usdt: number | null;
+  updated_at?: string | null;
+};
+
 const STATUS_OPTIONS = [
   { value: '', label: 'הכל' },
   { value: 'new', label: 'New' },
@@ -206,14 +213,11 @@ export default function AdminDashboardPage() {
     }
     setSellPriceSaving(true);
     try {
-      const updatePayload = {
+      const updatePayload: Partial<AppSettingsRow> = {
         sell_price_ils_per_usdt: val,
         updated_at: new Date().toISOString(),
       };
-      const { error } = await supabase
-        .from('app_settings')
-        .update(updatePayload as Record<string, unknown>)
-        .eq('id', 1);
+      const { error } = await supabase.from('app_settings').update(updatePayload as never).eq('id', 1);
       if (error) throw error;
       toast.success('מחיר המכירה עודכן');
       await fetchAppSettings();

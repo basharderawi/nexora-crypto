@@ -1,9 +1,19 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+/** app_settings table shape for typed updates */
+export type AppSettingsTable = {
+  Row: { id: number; sell_price_ils_per_usdt: number; updated_at: string };
+  Insert: { id?: number; sell_price_ils_per_usdt: number; updated_at?: string };
+  Update: { sell_price_ils_per_usdt?: number; updated_at?: string };
+};
+
 /** Extend this with your database schema types when ready */
 export type Database = {
   public: {
-    Tables: Record<string, unknown>;
+    Tables: {
+      app_settings: AppSettingsTable;
+      [key: string]: unknown;
+    };
     Views: Record<string, unknown>;
     Functions: Record<string, unknown>;
     Enums: Record<string, unknown>;
