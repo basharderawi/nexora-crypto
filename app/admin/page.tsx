@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabaseClient';
+import { triggerAdminReset } from '@/app/actions/adminReset';
 import { calculateProfitSummary } from '@/lib/profitSummary';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -115,7 +116,13 @@ export default function AdminDashboardPage() {
   const [sellPriceSaving, setSellPriceSaving] = useState(false);
 
   const [resetLoading, setResetLoading] = useState(false);
+  const [resetSystemModalOpen, setResetSystemModalOpen] = useState(false);
+  const [resetSystemConfirmText, setResetSystemConfirmText] = useState('');
+  const [resetSystemLoading, setResetSystemLoading] = useState(false);
   const isDev = typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
+
+  const RESET_CONFIRM_PHRASE = 'DELETE_ALL_DATA_FOREVER';
+  const resetSystemConfirmMatch = resetSystemConfirmText.trim() === RESET_CONFIRM_PHRASE;
 
   const [exportModalOpen, setExportModalOpen] = useState(false);
   // Store dates as YYYY-MM-DD only (native <input type="date"> value); sent as-is to API
@@ -259,6 +266,36 @@ export default function AdminDashboardPage() {
       toast.error(e instanceof Error ? e.message : 'Reset failed');
     } finally {
       setResetLoading(false);
+    }
+  }
+
+  function handleOpenResetSystemModal() {
+    setResetSystemConfirmText('');
+    setResetSystemModalOpen(true);
+  }
+
+  async function handleResetSystemExecute() {
+    if (!resetSystemConfirmMatch) return;
+    if (!confirm('This is the last step. All orders, inventory ledger, and inventory state will be permanently deleted. Proceed?')) return;
+    setResetSystemLoading(true);
+    try {
+      const result = await triggerAdminReset(resetSystemConfirmText.trim());
+      if (!result.success) {
+        toast.error(result.error ?? 'Reset failed');
+        return;
+      }
+      toast.success('System reset completed');
+      setResetSystemModalOpen(false);
+      setResetSystemConfirmText('');
+      setAddBatchModalOpen(false);
+      setAdjustModalOpen(false);
+      setCompleteModalOrder(null);
+      await fetchInventoryAndAggregates();
+      await fetchOrders();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Reset failed');
+    } finally {
+      setResetSystemLoading(false);
     }
   }
 
@@ -570,6 +607,14 @@ export default function AdminDashboardPage() {
           </span>
         </h1>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="ghost"
+            className="!py-2 !px-4 !text-sm font-semibold text-red-400 hover:bg-red-500/20 hover:text-red-300 disabled:opacity-50 border border-red-500/40"
+            onClick={handleOpenResetSystemModal}
+            disabled={resetSystemLoading}
+          >
+            {resetSystemLoading ? 'Resetting…' : 'RESET SYSTEM'}
+          </Button>
           {isDev && (
             <>
               <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-red-400">
@@ -873,6 +918,43 @@ export default function AdminDashboardPage() {
                 {manualOrderSaving ? 'Creating…' : 'Create order'}
               </Button>
               <Button variant="ghost" onClick={() => setManualOrderModalOpen(false)} disabled={manualOrderSaving}>
+                Cancel
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Reset system modal */}
+      {resetSystemModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <Card className="relative w-full max-w-md p-6">
+            <h3 className="mb-2 text-lg font-semibold text-red-400">
+              RESET SYSTEM
+            </h3>
+            <p className="mb-4 text-sm text-[var(--muted)]">
+              This will permanently delete all orders, inventory ledger, and inventory state. This cannot be undone.
+            </p>
+            <p className="mb-2 text-sm text-[var(--text)]">
+              Type <code className="rounded bg-red-500/20 px-1 py-0.5 font-mono text-red-300">{RESET_CONFIRM_PHRASE}</code> to confirm:
+            </p>
+            <Input
+              value={resetSystemConfirmText}
+              onChange={(e) => setResetSystemConfirmText(e.target.value)}
+              placeholder={RESET_CONFIRM_PHRASE}
+              className="mb-4 font-mono"
+              dir="ltr"
+            />
+            <div className="flex gap-3">
+              <Button
+                variant="primary"
+                className="!bg-red-600 hover:!bg-red-500"
+                onClick={handleResetSystemExecute}
+                disabled={!resetSystemConfirmMatch || resetSystemLoading}
+              >
+                {resetSystemLoading ? 'Resetting…' : 'Execute reset'}
+              </Button>
+              <Button variant="ghost" onClick={() => setResetSystemModalOpen(false)} disabled={resetSystemLoading}>
                 Cancel
               </Button>
             </div>

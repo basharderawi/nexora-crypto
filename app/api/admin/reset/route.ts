@@ -1,64 +1,43 @@
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/auth-helpers-nextjs';
-import type { Database } from '@/lib/supabaseClient';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-export async function POST() {
+const CONFIRM_TEXT = 'DELETE_ALL_DATA_FOREVER';
+
+export async function POST(request: NextRequest) {
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anonKey) {
+    const adminSecret = process.env.ADMIN_SECRET;
+    if (!adminSecret) {
+      return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+    }
+
+    const headerSecret = request.headers.get('x-admin-secret');
+    if (headerSecret !== adminSecret) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const confirm = typeof body?.confirm === 'string' ? body.confirm : '';
+    if (confirm !== CONFIRM_TEXT) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { data, error } = await supabaseAdmin.rpc('admin_full_reset');
+    if (error) {
+      console.error('[api/admin/reset] rpc error:', error);
+      return NextResponse.json({ error: 'Reset failed' }, { status: 500 });
+    }
+
+    const result = data as { success?: boolean; error?: string } | null;
+    if (result?.success !== true) {
       return NextResponse.json(
-        { error: 'Missing Supabase configuration' },
+        { error: result?.error ?? 'Reset failed' },
         { status: 500 }
       );
     }
 
-    const cookieStore = await cookies();
-    const supabase = createServerClient<Database>(url, anonKey, {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-          } catch {
-            // Ignored when response already sent
-          }
-        },
-      },
-    });
-
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !user) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      );
-    }
-
-    const { data, error } = await supabase.rpc('reset_all_data');
-    if (error) {
-      const msg = (error as { message?: string }).message ?? error?.message ?? 'Reset failed';
-      return NextResponse.json(
-        { error: msg },
-        { status: 400 }
-      );
-    }
-    const result = data as { ok?: boolean; error?: string } | null;
-    if (result?.ok === false) {
-      return NextResponse.json(
-        { error: result.error ?? 'Reset failed' },
-        { status: 400 }
-      );
-    }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ success: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Reset failed';
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    console.error('[api/admin/reset] error:', e);
+    return NextResponse.json({ error: 'Reset failed' }, { status: 500 });
   }
 }
