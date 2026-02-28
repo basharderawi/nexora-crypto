@@ -73,7 +73,6 @@ export default function OrderPage() {
 
   async function onSubmit(data: OrderFormData) {
     try {
-      const { supabase } = await import('@/lib/supabaseClient');
       const payload = {
         full_name: data.full_name,
         city: data.city,
@@ -83,17 +82,19 @@ export default function OrderPage() {
         notes: data.notes || null,
         status: 'new',
       };
-      console.log('ORDER_PAYLOAD', payload);
-      const { data: inserted, error } = await supabase.from('orders').insert(payload as never).select('id').single();
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
 
-      if (error) {
-        console.error('SUPABASE_ERROR', error);
-        throw error;
+      if (!res.ok) {
+        throw new Error(typeof json?.error === 'string' ? json.error : 'Order creation failed');
       }
 
       setSubmittedData(data);
-      const insertedRow = inserted as { id?: string } | null;
-      if (insertedRow?.id) setOrderId(insertedRow.id);
+      if (json?.id) setOrderId(json.id);
       toast.success('ההזמנה נוצרה בהצלחה');
 
       const totalIls =
