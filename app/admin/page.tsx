@@ -236,30 +236,27 @@ export default function AdminDashboardPage() {
 
   async function handleResetAllData() {
     if (!confirm('This will permanently delete ALL orders and inventory data. Are you sure?')) return;
-    console.log("[RESET] clicked");
     setResetLoading(true);
     try {
-      const { data, error } = await supabase.rpc("reset_all_data");
-      console.log("[RESET] data:", data);
-      console.log("[RESET] error:", error);
-      if (error) {
-        const err = error as { message?: string; details?: string };
-        const msg = [err?.message, err?.details].filter(Boolean).join(' | ') || 'Reset failed';
-        toast.error(msg);
+      const res = await fetch('/api/admin/reset', { method: 'POST' });
+      let data: { error?: string; message?: string } | null = null;
+      try {
+        data = await res.json();
+      } catch {}
+
+      if (!res.ok) {
+        toast.error(data?.error ?? data?.message ?? 'Request failed');
         return;
       }
-      if (data?.ok === false) {
-        toast.error((data as { error?: string }).error ?? "Reset failed");
-        return;
-      }
-      toast.success("All data reset");
+
+      toast.success('All data reset');
       setAddBatchModalOpen(false);
       setAdjustModalOpen(false);
       setCompleteModalOrder(null);
       await fetchInventoryAndAggregates();
       await fetchOrders();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Reset failed");
+      toast.error(e instanceof Error ? e.message : 'Reset failed');
     } finally {
       setResetLoading(false);
     }
