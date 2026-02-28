@@ -278,11 +278,9 @@ export default function AdminDashboardPage() {
 
     setAddBatchSaving(true);
     try {
-      const { data, error } = await supabase.rpc('add_inventory', {
-        p_amount_usdt: amount,
-        p_buy_price: buyPrice,
-        p_note: note,
-      });
+      type AddInventoryBatchArgs = { p_amount_usdt: number; p_buy_price: number; p_note: string | null };
+      const addBatchArgs: AddInventoryBatchArgs = { p_amount_usdt: amount, p_buy_price: buyPrice, p_note: note };
+      const { data, error } = await supabase.rpc('add_inventory_batch', addBatchArgs as never);
       if (error) {
         const err = error as { message?: string; details?: string };
         const msg = [err?.message, err?.details].filter(Boolean).join(' | ') || 'שגיאה בהוספת מלאי';
@@ -323,10 +321,9 @@ export default function AdminDashboardPage() {
 
     setAdjustSaving(true);
     try {
-      const { data, error } = await supabase.rpc('adjust_inventory', {
-        p_amount_usdt: amount,
-        p_note: note,
-      });
+      type AdjustInventoryArgs = { p_amount_usdt: number; p_note: string | null };
+      const adjustArgs: AdjustInventoryArgs = { p_amount_usdt: amount, p_note: note };
+      const { data, error } = await supabase.rpc('adjust_inventory', adjustArgs as never);
       if (error) {
         const err = error as { message?: string; details?: string };
         const msg = [err?.message, err?.details].filter(Boolean).join(' | ') || 'שגיאה בהתאמת מלאי';
@@ -381,16 +378,9 @@ export default function AdminDashboardPage() {
 
     setManualOrderSaving(true);
     try {
-      const { error } = await supabase.from('orders').insert({
-        full_name,
-        phone,
-        city,
-        amount_usdt: amountVal,
-        payment_method,
-        notes,
-        status: 'new',
-        sell_price_ils_per_usdt,
-      });
+      type OrderInsert = { full_name: string; phone: string; city: string; amount_usdt: number; payment_method: string; notes: string | null; status: string; sell_price_ils_per_usdt: number | null };
+      const orderRow: OrderInsert = { full_name, phone, city, amount_usdt: amountVal, payment_method, notes, status: 'new', sell_price_ils_per_usdt };
+      const { error } = await supabase.from('orders').insert(orderRow as never);
       if (error) throw error;
       toast.success('Manual order created successfully');
       setManualOrderModalOpen(false);
@@ -411,10 +401,9 @@ export default function AdminDashboardPage() {
   async function handleCancelOrder(order: OrderRow) {
     setCancellingId(order.id);
     try {
-      const { data, error } = await supabase.rpc('cancel_order', {
-        p_order_id: order.id,
-        p_note: null,
-      });
+      type CancelOrderArgs = { p_order_id: string; p_note: null };
+      const cancelArgs: CancelOrderArgs = { p_order_id: order.id, p_note: null };
+      const { data, error } = await supabase.rpc('cancel_order', cancelArgs as never);
       if (error) {
         const err = error as { message?: string; details?: string };
         const msg = [err?.message, err?.details].filter(Boolean).join(' | ') || 'ביטול נכשל';
@@ -440,10 +429,9 @@ export default function AdminDashboardPage() {
     if (!confirm('לבטל ולהסיר את ההזמנה מהרשימה? (סטטוס יישמר כ־cancelled)')) return;
     setDeletingId(order.id);
     try {
-      const { data, error } = await supabase.rpc('cancel_order', {
-        p_order_id: order.id,
-        p_note: null,
-      });
+      type CancelOrderArgs = { p_order_id: string; p_note: null };
+      const cancelArgs: CancelOrderArgs = { p_order_id: order.id, p_note: null };
+      const { data, error } = await supabase.rpc('cancel_order', cancelArgs as never);
       if (error) {
         const err = error as { message?: string; details?: string };
         const msg = [err?.message, err?.details].filter(Boolean).join(' | ') || 'מחיקת ההזמנה נכשלה';
@@ -540,11 +528,9 @@ export default function AdminDashboardPage() {
       const rateRes = await fetch('/api/usd-ils');
       if (!rateRes.ok) throw new Error('Failed to fetch USD/ILS rate');
       const { rate } = await rateRes.json();
-      const { data, error } = await supabase.rpc('complete_order', {
-        p_order_id: completeModalOrder.id,
-        p_sell_price: sellPrice,
-        p_usd_ils_rate: rate ?? null,
-      });
+      type CompleteOrderArgs = { p_order_id: string; p_sell_price: number; p_usd_ils_rate: number | null };
+      const completeArgs: CompleteOrderArgs = { p_order_id: completeModalOrder.id, p_sell_price: sellPrice, p_usd_ils_rate: rate ?? null };
+      const { data, error } = await supabase.rpc('complete_order', completeArgs as never);
       if (error) {
         const err = error as { message?: string; details?: string };
         const msg = [err?.message, err?.details].filter(Boolean).join(' | ') || 'השלמת ההזמנה נכשלה';

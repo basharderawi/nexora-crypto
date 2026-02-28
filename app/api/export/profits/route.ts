@@ -196,11 +196,11 @@ export async function GET(request: NextRequest) {
     const headerFont = { bold: true };
     const rtlAlignment = { horizontal: 'right' as const };
 
-    function formatDate(iso: string | null): string {
+    const formatDate = (iso: string | null): string => {
       if (!iso) return '';
       const d = new Date(iso);
       return d.toISOString().slice(0, 19).replace('T', ' ');
-    }
+    };
 
     // Sheet 1: סיכום – RTL, Row 1 = headers, Row 2 = values
     const sheet1 = workbook.addWorksheet('סיכום', { views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }] });
@@ -305,9 +305,10 @@ export async function GET(request: NextRequest) {
 
     const buffer = await workbook.xlsx.writeBuffer();
     const filename = `nexora_report_${from}_to_${to}.xlsx`;
-    const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer as ArrayBuffer);
+    const buf = buffer as unknown;
+    const bytes: Uint8Array = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf instanceof Uint8Array ? buf : new Uint8Array(buf as ArrayBuffer);
 
-    return new Response(bytes, {
+    return new Response(bytes as unknown as BodyInit, {
       status: 200,
       headers: {
         'Content-Type': XLSX_CT,

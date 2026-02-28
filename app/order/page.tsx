@@ -62,8 +62,8 @@ export default function OrderPage() {
     (async () => {
       try {
         const { supabase } = await import('@/lib/supabaseClient');
-        const { data } = await supabase.from('app_settings').select('sell_price_ils_per_usdt').eq('id', 1).single();
-        const val = data?.sell_price_ils_per_usdt;
+        const { data: settingsRow } = await supabase.from('app_settings').select('sell_price_ils_per_usdt').eq('id', 1).single();
+        const val = (settingsRow as { sell_price_ils_per_usdt?: number } | null)?.sell_price_ils_per_usdt;
         setSellPrice(typeof val === 'number' ? val : val != null ? parseFloat(String(val)) : null);
       } catch {
         setSellPrice(null);
@@ -84,7 +84,7 @@ export default function OrderPage() {
         status: 'new',
       };
       console.log('ORDER_PAYLOAD', payload);
-      const { data: inserted, error } = await supabase.from('orders').insert(payload).select('id').single();
+      const { data: inserted, error } = await supabase.from('orders').insert(payload as never).select('id').single();
 
       if (error) {
         console.error('SUPABASE_ERROR', error);
@@ -92,7 +92,8 @@ export default function OrderPage() {
       }
 
       setSubmittedData(data);
-      if (inserted?.id) setOrderId(inserted.id);
+      const insertedRow = inserted as { id?: string } | null;
+      if (insertedRow?.id) setOrderId(insertedRow.id);
       toast.success('ההזמנה נוצרה בהצלחה');
 
       const totalIls =
