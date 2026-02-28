@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark navy/black gradient base */
+    --bg0: #0a0e17;
+    --bg1: #0f1623;
+    --card: rgba(15, 22, 35, 0.6);
+    --border: rgba(6, 182, 212, 0.25);
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    /* Neon cyan-blue */
+    --primary: #06b6d4;
+    --primary2: #0ea5e9;
+    --glow: rgba(6, 182, 212, 0.4);
+  }
+
+  html {
+    @apply antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  body {
+    min-height: 100vh;
+    background: linear-gradient(160deg, var(--bg0) 0%, #0f1623 40%, #0a0e17 100%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    text-align: right;
+  }
+
+  [dir="ltr"] {
+    text-align: left;
+  }
+
+  /* Subtle glow on focus/primary elements */
+  .text-glow {
+    text-shadow: 0 0 20px var(--glow);
+  }
+
+  .box-glow {
+    box-shadow: 0 0 24px var(--glow);
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+  }
+  .animate-glow-pulse {
+    animation: glow-pulse 3s ease-in-out infinite;
+  }
+}
