@@ -21,19 +21,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { data, error } = await supabaseAdmin.rpc('admin_full_reset');
-    if (error) {
-      console.error('[api/admin/reset] rpc error:', error);
-      return NextResponse.json({ error: 'Reset failed' }, { status: 500 });
-    }
-
-    const result = data as { success?: boolean; error?: string } | null;
-    if (result?.success !== true) {
-      return NextResponse.json(
-        { error: result?.error ?? 'Reset failed' },
-        { status: 500 }
-      );
-    }
+    await supabaseAdmin.from('orders').delete().neq('id', null as never);
+    await supabaseAdmin.from('inventory_state').delete().neq('id', null as never);
+    await supabaseAdmin.from('inventory_ledger').delete().neq('id', null as never);
 
     return NextResponse.json({ success: true });
   } catch (e) {

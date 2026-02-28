@@ -1,22 +1,33 @@
 'use server';
 
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
-
 const CONFIRM_TEXT = 'DELETE_ALL_DATA_FOREVER';
+
+function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return 'http://localhost:3000';
+}
 
 export async function triggerAdminReset(confirmText: string): Promise<{ success: boolean; error?: string }> {
   if (confirmText !== CONFIRM_TEXT) {
     return { success: false, error: 'Invalid confirmation' };
   }
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) {
+    return { success: false, error: 'Server misconfiguration' };
+  }
   try {
-    const { data, error } = await supabaseAdmin.rpc('admin_full_reset');
-    if (error) {
-      console.error('[adminReset] rpc error:', error);
-      return { success: false, error: error.message ?? 'Reset failed' };
-    }
-    const result = data as { success?: boolean; error?: string } | null;
-    if (result?.success !== true) {
-      return { success: false, error: result?.error ?? 'Reset failed' };
+    const res = await fetch(`${getBaseUrl()}/api/admin/reset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-secret': secret,
+      },
+      body: JSON.stringify({ confirm: CONFIRM_TEXT }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, error: (data?.error as string) ?? 'Reset failed' };
     }
     return { success: true };
   } catch (e) {

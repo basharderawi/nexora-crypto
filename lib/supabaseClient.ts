@@ -47,10 +47,6 @@ export type DatabaseFunctions = {
     Args: Record<string, never>;
     Returns: unknown;
   };
-  admin_full_reset: {
-    Args: Record<string, never>;
-    Returns: unknown;
-  };
 };
 
 /** Extend this with your database schema types when ready */
