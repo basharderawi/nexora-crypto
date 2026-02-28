@@ -143,13 +143,16 @@ export default function AdminDashboardPage() {
   }, [statusFilter, paymentFilter]);
 
   const fetchInventoryAndAggregates = useCallback(async () => {
-    const [invRes, aggRes] = await Promise.all([
-      supabase.from('inventory_state').select('*').eq('id', 1).single(),
-      supabase.from('orders').select('amount_usdt, profit_ils, profit_usd, sell_price_ils_per_usdt').eq('status', 'completed'),
+    type InvResponse = { data: InventoryState | null; error: unknown };
+    type AggResponse = { data: { amount_usdt?: number; profit_ils?: number; profit_usd?: number; sell_price_ils_per_usdt?: number }[] | null; error: unknown };
+    const [invResult, aggResult] = await Promise.all([
+      supabase.from('inventory_state').select('*').eq('id', 1).maybeSingle() as Promise<InvResponse>,
+      supabase.from('orders').select('amount_usdt, profit_ils, profit_usd, sell_price_ils_per_usdt').eq('status', 'completed') as Promise<AggResponse>,
     ]);
-    if (invRes.data) setInventory(invRes.data as InventoryState);
-    else setInventory(null);
-    const completed = (aggRes.data ?? []) as { amount_usdt?: number; profit_ils?: number; profit_usd?: number; sell_price_ils_per_usdt?: number }[];
+    const invData = invResult.data;
+    const aggData = aggResult.data;
+    setInventory(invData ?? null);
+    const completed = aggData ?? [];
     const summary = calculateProfitSummary(completed);
     setAggregates({
       totalSoldUsdt: summary.totalSoldUsdt,
