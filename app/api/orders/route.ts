@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     const { data: inserted, error } = await supabaseAdmin
       .from('orders')
-      .insert({
+      .insert([{
         full_name: parsed.full_name,
         city: parsed.city,
         phone: parsed.phone,
@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
         notes: parsed.notes ?? null,
         status: 'new',
         sell_price_ils_per_usdt,
-      })
-      .select('id')
+      }] as any)
+      .select()
       .single();
 
     if (error) {
