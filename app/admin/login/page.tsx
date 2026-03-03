@@ -1,34 +1,32 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useFormStatus } from 'react-dom';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import { signIn } from './actions';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
-export default function AdminLoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="primary" className="w-full" disabled={pending}>
+      {pending ? 'מתחבר…' : 'התחבר'}
+    </Button>
+  );
+}
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      toast.success('התחברת בהצלחה');
-      router.push('/admin');
-      router.refresh();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'התחברות נכשלה';
-      toast.error(message);
-    } finally {
-      setLoading(false);
+export default function AdminLoginPage() {
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(formData: FormData) {
+    setError(null);
+    const result = await signIn(formData);
+    if (result?.error) {
+      setError(result.error);
+      toast.error(result.error);
     }
   }
 
@@ -47,32 +45,36 @@ export default function AdminLoginPage() {
         </div>
 
         <Card>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form action={handleSubmit} className="space-y-5">
             <CardTitle className="mb-4 border-b border-[var(--border)] pb-3">
               Sign in
             </CardTitle>
 
+            {error && (
+              <p className="text-sm text-red-500" role="alert">
+                {error}
+              </p>
+            )}
+
             <Input
               label="אימייל"
+              name="email"
               type="email"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               placeholder="admin@example.com"
             />
             <Input
               label="סיסמה"
+              name="password"
               type="password"
               required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
               placeholder="••••••••"
             />
 
             <div className="flex flex-col gap-3 pt-2">
-              <Button type="submit" variant="primary" className="w-full" disabled={loading}>
-                {loading ? 'מתחבר…' : 'Sign in'}
-              </Button>
+              <SubmitButton />
               <Link
                 href="/"
                 className="text-center text-sm text-[var(--muted)] hover:text-[var(--primary)]"

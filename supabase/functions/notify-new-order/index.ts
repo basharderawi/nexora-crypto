@@ -13,6 +13,7 @@ type OrderRecord = {
   payment_method?: string | null;
   notes?: string | null;
   created_at?: string | null;
+  side?: string | null;
 };
 
 type WebhookPayload = {
@@ -21,19 +22,39 @@ type WebhookPayload = {
   record?: OrderRecord;
 };
 
-function buildMessage(record: OrderRecord): string {
+function buildMessage(record: OrderRecord): { text: string; label: string; side: string } {
+  const side = record.side === "BUY" || record.side === "SELL" ? record.side : (record.side ?? "-");
+  const label =
+    side === "SELL"
+      ? "🟦 הלקוח קונה USDT (אנחנו מוכרים)"
+      : side === "BUY"
+        ? "🟩 הלקוח מוכר USDT (אנחנו קונים)"
+        : "🟨 הזמנה חדשה";
+  const typeLine =
+    side === "SELL"
+      ? "סוג: מכירה ללקוח"
+      : side === "BUY"
+        ? "סוג: קנייה מהלקוח"
+        : "סוג: -";
+
   const id = record.id ?? "-";
   const name = record.full_name ?? "-";
-  const city = record.city ?? "-";
+  const city =
+    record.city !== undefined && record.city !== null && String(record.city).trim() !== ""
+      ? String(record.city).trim()
+      : "-";
   const phone = record.phone ?? "-";
   const amount = record.amount_usdt != null ? String(record.amount_usdt) : "-";
   const payment = record.payment_method ?? "-";
   const notes = record.notes ?? "-";
   const created = record.created_at ?? "-";
 
-  return [
-    "🟢 New Nexora Order",
+  const debugSide = side === "BUY" || side === "SELL" ? side : String(record.side ?? "-");
+
+  const text = [
+    label,
     "",
+    typeLine,
     `Name: ${name}`,
     `City: ${city}`,
     `Phone: ${phone}`,
@@ -43,7 +64,11 @@ function buildMessage(record: OrderRecord): string {
     "",
     `Order ID: ${id}`,
     `Created: ${created}`,
+    "",
+    `DEBUG side=${debugSide}`,
   ].join("\n");
+
+  return { text, label, side };
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -75,7 +100,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 
-  const text = buildMessage(record);
+  const { text, label, side } = buildMessage(record);
+  const orderId = record.id ?? null;
+  console.log("[TELEGRAM_SEND] route=EdgeFunction(notify-new-order) orderId=", orderId, "side=", record.side, "computedLabel=", label);
   const url = `${TELEGRAM_API}/bot${token}/sendMessage`;
 
   const res = await fetch(url, {

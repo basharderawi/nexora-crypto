@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
-import { triggerAdminReset } from '@/app/actions/adminReset';
+import { supabase } from '@/lib/supabase/client';
 import { calculateProfitSummary } from '@/lib/profitSummary';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -37,6 +36,7 @@ type Aggregates = {
 type AppSettings = {
   id: number;
   sell_price_ils_per_usdt: number;
+  buy_price_ils_per_usdt?: number;
   updated_at: string;
 } | null;
 
@@ -44,22 +44,34 @@ type AppSettings = {
 type AppSettingsRow = {
   id: number;
   sell_price_ils_per_usdt: number | null;
+  buy_price_ils_per_usdt?: number | null;
   updated_at?: string | null;
 };
 
 const STATUS_OPTIONS = [
   { value: '', label: 'הכל' },
-  { value: 'new', label: 'New' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'new', label: 'חדשה' },
+  { value: 'completed', label: 'הושלמה' },
+  { value: 'cancelled', label: 'בוטלה' },
 ];
 
 const PAYMENT_OPTIONS = [
   { value: '', label: 'הכל' },
-  { value: 'BIT', label: 'BIT' },
-  { value: 'CASH_MEETUP', label: 'CASH_MEETUP' },
-  { value: 'CASH_WITHOUT_CARD', label: 'CASH_WITHOUT_CARD' },
+  { value: 'BIT', label: 'ביט' },
+  { value: 'CASH_MEETUP', label: 'מזומן (מפגש)' },
+  { value: 'CASH_WITHOUT_CARD', label: 'מזומן (ללא כרטיס)' },
 ];
+
+function paymentDisplayLabel(value: string | null): string {
+  if (!value) return '—';
+  const o = PAYMENT_OPTIONS.find((p) => p.value === value);
+  return o?.label ?? value;
+}
+function statusDisplayLabel(value: string | null): string {
+  if (!value) return '—';
+  const o = STATUS_OPTIONS.find((s) => s.value === value);
+  return o?.label ?? value;
+}
 
 function shortId(id: string): string {
   return id.length >= 6 ? id.slice(-6) : id;
@@ -90,7 +102,6 @@ export default function AdminDashboardPage() {
     totalProfitUsd: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [authChecked, setAuthChecked] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
 
@@ -115,14 +126,14 @@ export default function AdminDashboardPage() {
   const [sellPriceEdit, setSellPriceEdit] = useState('');
   const [sellPriceSaving, setSellPriceSaving] = useState(false);
 
-  const [resetLoading, setResetLoading] = useState(false);
   const [resetSystemModalOpen, setResetSystemModalOpen] = useState(false);
   const [resetSystemConfirmText, setResetSystemConfirmText] = useState('');
   const [resetSystemLoading, setResetSystemLoading] = useState(false);
-  const isDev = typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
 
   const RESET_CONFIRM_PHRASE = 'DELETE_ALL_DATA_FOREVER';
   const resetSystemConfirmMatch = resetSystemConfirmText.trim() === RESET_CONFIRM_PHRASE;
+  const resetSystemCanExecute = resetSystemConfirmMatch;
+  const isDev = typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
 
   const [exportModalOpen, setExportModalOpen] = useState(false);
   // Store dates as YYYY-MM-DD only (native <input type="date"> value); sent as-is to API
@@ -144,6 +155,18 @@ export default function AdminDashboardPage() {
   const [manualOrderPaymentMethod, setManualOrderPaymentMethod] = useState<string>('BIT');
   const [manualOrderNotes, setManualOrderNotes] = useState('');
   const [manualOrderSaving, setManualOrderSaving] = useState(false);
+
+  const [buyPriceEdit, setBuyPriceEdit] = useState('');
+  const [buyPriceSaving, setBuyPriceSaving] = useState(false);
+
+  const [sellOrderModalOpen, setSellOrderModalOpen] = useState(false);
+  const [sellOrderFullName, setSellOrderFullName] = useState('');
+  const [sellOrderPhone, setSellOrderPhone] = useState('');
+  const [sellOrderCity, setSellOrderCity] = useState('');
+  const [sellOrderAmount, setSellOrderAmount] = useState('');
+  const [sellOrderPaymentMethod, setSellOrderPaymentMethod] = useState<string>('BIT');
+  const [sellOrderNotes, setSellOrderNotes] = useState('');
+  const [sellOrderSaving, setSellOrderSaving] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     let query = supabase
@@ -187,30 +210,20 @@ export default function AdminDashboardPage() {
   const fetchAppSettings = useCallback(async () => {
     const { data } = await supabase.from('app_settings').select('*').eq('id', 1).single();
     if (data) {
+      const row = data as { sell_price_ils_per_usdt: number; buy_price_ils_per_usdt?: number };
       setAppSettings(data as AppSettings);
-      setSellPriceEdit(String((data as { sell_price_ils_per_usdt: number }).sell_price_ils_per_usdt));
+      setSellPriceEdit(String(row.sell_price_ils_per_usdt));
+      setBuyPriceEdit(String(row.buy_price_ils_per_usdt ?? 0));
     } else setAppSettings(null);
   }, []);
 
   useEffect(() => {
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.replace('/admin/login');
-        return;
-      }
-      setAuthChecked(true);
-    })();
-  }, [router]);
-
-  useEffect(() => {
-    if (!authChecked) return;
-    (async () => {
       setLoading(true);
       await Promise.all([fetchOrders(), fetchInventoryAndAggregates(), fetchAppSettings()]);
       setLoading(false);
     })();
-  }, [authChecked, statusFilter, paymentFilter, fetchOrders, fetchInventoryAndAggregates, fetchAppSettings]);
+  }, [statusFilter, paymentFilter, fetchOrders, fetchInventoryAndAggregates, fetchAppSettings]);
 
   async function handleSellPriceSave() {
     const val = parseFloat(sellPriceEdit);
@@ -235,38 +248,33 @@ export default function AdminDashboardPage() {
     }
   }
 
+  async function handleBuyPriceSave() {
+    const val = parseFloat(buyPriceEdit);
+    if (Number.isNaN(val) || val < 0) {
+      toast.error('הזן מחיר תקין (0 ומעלה)');
+      return;
+    }
+    setBuyPriceSaving(true);
+    try {
+      const updatePayload: Partial<AppSettingsRow> = {
+        buy_price_ils_per_usdt: val,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from('app_settings').update(updatePayload as never).eq('id', 1);
+      if (error) throw error;
+      toast.success('מחיר הקנייה עודכן');
+      await fetchAppSettings();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'שגיאה בעדכון המחיר');
+    } finally {
+      setBuyPriceSaving(false);
+    }
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push('/');
     router.refresh();
-  }
-
-  async function handleResetAllData() {
-    if (!confirm('This will permanently delete ALL orders and inventory data. Are you sure?')) return;
-    setResetLoading(true);
-    try {
-      const res = await fetch('/api/admin/reset', { method: 'POST' });
-      let data: { error?: string; message?: string } | null = null;
-      try {
-        data = await res.json();
-      } catch {}
-
-      if (!res.ok) {
-        toast.error(data?.error ?? data?.message ?? 'Request failed');
-        return;
-      }
-
-      toast.success('All data reset');
-      setAddBatchModalOpen(false);
-      setAdjustModalOpen(false);
-      setCompleteModalOrder(null);
-      await fetchInventoryAndAggregates();
-      await fetchOrders();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Reset failed');
-    } finally {
-      setResetLoading(false);
-    }
   }
 
   function handleOpenResetSystemModal() {
@@ -275,16 +283,21 @@ export default function AdminDashboardPage() {
   }
 
   async function handleResetSystemExecute() {
-    if (!resetSystemConfirmMatch) return;
-    if (!confirm('This is the last step. All orders, inventory ledger, and inventory state will be permanently deleted. Proceed?')) return;
+    if (!resetSystemCanExecute) return;
     setResetSystemLoading(true);
     try {
-      const result = await triggerAdminReset(resetSystemConfirmText.trim());
-      if (!result.success) {
-        toast.error(result.error ?? 'Reset failed');
+      const res = await fetch('/api/admin/system-reset', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: RESET_CONFIRM_PHRASE }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data?.message ?? data?.error ?? 'האיפוס נכשל');
         return;
       }
-      toast.success('System reset completed');
+      toast.success('האיפוס בוצע בהצלחה');
       setResetSystemModalOpen(false);
       setResetSystemConfirmText('');
       setAddBatchModalOpen(false);
@@ -292,8 +305,9 @@ export default function AdminDashboardPage() {
       setCompleteModalOrder(null);
       await fetchInventoryAndAggregates();
       await fetchOrders();
+      await fetchAppSettings();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Reset failed');
+      toast.error(e instanceof Error ? e.message : 'איפוס נכשל');
     } finally {
       setResetSystemLoading(false);
     }
@@ -394,19 +408,19 @@ export default function AdminDashboardPage() {
     const notes = manualOrderNotes?.trim() || null;
 
     if (!full_name) {
-      toast.error('Full name is required');
+      toast.error('שם מלא חובה');
       return;
     }
     if (!phone) {
-      toast.error('Phone is required');
+      toast.error('טלפון חובה');
       return;
     }
     if (!city) {
-      toast.error('City is required');
+      toast.error('עיר חובה');
       return;
     }
     if (Number.isNaN(amountVal) || amountVal <= 0) {
-      toast.error('Amount (USDT) must be greater than 0');
+      toast.error('כמות USDT חייבת להיות גדולה מ-0');
       return;
     }
 
@@ -415,11 +429,11 @@ export default function AdminDashboardPage() {
 
     setManualOrderSaving(true);
     try {
-      type OrderInsert = { full_name: string; phone: string; city: string; amount_usdt: number; payment_method: string; notes: string | null; status: string; sell_price_ils_per_usdt: number | null };
-      const orderRow: OrderInsert = { full_name, phone, city, amount_usdt: amountVal, payment_method, notes, status: 'new', sell_price_ils_per_usdt };
+      type OrderInsert = { full_name: string; phone: string; city: string; amount_usdt: number; payment_method: string; notes: string | null; status: string; side: 'SELL'; sell_price_ils_per_usdt: number | null };
+      const orderRow: OrderInsert = { full_name, phone, city, amount_usdt: amountVal, payment_method, notes, status: 'new', side: 'SELL', sell_price_ils_per_usdt };
       const { error } = await supabase.from('orders').insert(orderRow as never);
       if (error) throw error;
-      toast.success('Manual order created successfully');
+      toast.success('ההזמנה נוצרה בהצלחה');
       setManualOrderModalOpen(false);
       setManualOrderFullName('');
       setManualOrderPhone('');
@@ -429,9 +443,79 @@ export default function AdminDashboardPage() {
       setManualOrderNotes('');
       await fetchOrders();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Failed to create order');
+      toast.error(e instanceof Error ? e.message : 'יצירת ההזמנה נכשלה');
     } finally {
       setManualOrderSaving(false);
+    }
+  }
+
+  async function handleCreateSellOrder() {
+    const full_name = sellOrderFullName?.trim() || '';
+    const phone = sellOrderPhone?.trim() || '';
+    const city = sellOrderCity?.trim() || '';
+    const amountVal = Number(sellOrderAmount);
+    const payment_method = sellOrderPaymentMethod || 'BIT';
+    const notes = sellOrderNotes?.trim() || null;
+
+    if (!full_name) {
+      toast.error('שם מלא חובה');
+      return;
+    }
+    if (!phone) {
+      toast.error('טלפון חובה');
+      return;
+    }
+    if (!city) {
+      toast.error('עיר חובה');
+      return;
+    }
+    if (Number.isNaN(amountVal) || amountVal <= 0) {
+      toast.error('כמות USDT חייבת להיות גדולה מ-0');
+      return;
+    }
+
+    const buy_price_ils_per_usdt =
+      appSettings?.buy_price_ils_per_usdt != null ? appSettings.buy_price_ils_per_usdt : 0;
+
+    setSellOrderSaving(true);
+    try {
+      type SellOrderInsert = {
+        full_name: string;
+        phone: string;
+        city: string;
+        amount_usdt: number;
+        payment_method: string;
+        notes: string | null;
+        status: string;
+        side: 'BUY';
+        buy_price_ils_per_usdt: number;
+      };
+      const orderRow: SellOrderInsert = {
+        full_name,
+        phone,
+        city,
+        amount_usdt: amountVal,
+        payment_method,
+        notes,
+        status: 'new',
+        side: 'BUY',
+        buy_price_ils_per_usdt,
+      };
+      const { error } = await supabase.from('orders').insert(orderRow as never);
+      if (error) throw error;
+      toast.success('הזמנת מכירה נוצרה בהצלחה');
+      setSellOrderModalOpen(false);
+      setSellOrderFullName('');
+      setSellOrderPhone('');
+      setSellOrderCity('');
+      setSellOrderAmount('');
+      setSellOrderPaymentMethod('BIT');
+      setSellOrderNotes('');
+      await fetchOrders();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'יצירת הזמנת המכירה נכשלה');
+    } finally {
+      setSellOrderSaving(false);
     }
   }
 
@@ -512,7 +596,7 @@ export default function AdminDashboardPage() {
       const isXlsx = ct.includes("sheet") || ct.includes("spreadsheetml");
       if (isXlsx) {
         if (!res.ok) {
-          toast.error(`Export failed: ${res.status}`);
+          toast.error(`הייצוא נכשל: ${res.status}`);
           return;
         }
         const blob = await res.blob();
@@ -530,18 +614,18 @@ export default function AdminDashboardPage() {
       const text = await res.text();
       if (!res.ok) {
         console.error("[EXPORT]", res.status, ct, text);
-        toast.error(`Export failed: ${res.status}. See console.`);
+        toast.error(`הייצוא נכשל: ${res.status}`);
         return;
       }
       try {
         const json = JSON.parse(text) as { error?: string };
         toast.error(json?.error ?? text.slice(0, 100));
       } catch {
-        toast.error("Export did not return an Excel file. See console.");
+        toast.error("הייצוא לא החזיר קובץ Excel.");
       }
       console.error("[EXPORT] Content-Type:", ct, "body:", text.slice(0, 200));
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Export failed");
+      toast.error(e instanceof Error ? e.message : "הייצוא נכשל");
     } finally {
       setExportDownloading(false);
     }
@@ -551,7 +635,7 @@ export default function AdminDashboardPage() {
     if (!completeModalOrder) return;
     const currentSellPrice = appSettings?.sell_price_ils_per_usdt;
     if (currentSellPrice == null || Number.isNaN(Number(currentSellPrice)) || Number(currentSellPrice) <= 0) {
-      toast.error('Set Current Sell Price first');
+      toast.error('הגדר תחילה את מחיר המכירה הנוכחי');
       return;
     }
     const sellPrice = Number(currentSellPrice);
@@ -590,63 +674,35 @@ export default function AdminDashboardPage() {
     }
   }
 
-  if (!authChecked) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <p className="text-[var(--muted)]">טוען…</p>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-5xl space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-[var(--text)]">
-          <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--primary2)] bg-clip-text text-transparent">
-            Admin Dashboard
-          </span>
-        </h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="ghost"
-            className="!py-2 !px-4 !text-sm font-semibold text-red-400 hover:bg-red-500/20 hover:text-red-300 disabled:opacity-50 border border-red-500/40"
-            onClick={handleOpenResetSystemModal}
-            disabled={resetSystemLoading}
-          >
-            {resetSystemLoading ? 'Resetting…' : 'RESET SYSTEM'}
-          </Button>
-          {isDev && (
-            <>
-              <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-red-400">
-                DEV ONLY
-              </span>
-              <Button
-                variant="ghost"
-                className="!py-1.5 !px-3 !text-sm text-red-400 hover:bg-red-500/20 hover:text-red-300 disabled:opacity-50"
-                onClick={handleResetAllData}
-                disabled={resetLoading}
-              >
-                {resetLoading ? 'Resetting…' : 'Reset All Data'}
-              </Button>
-            </>
-          )}
-          <Button variant="ghost" onClick={handleLogout}>
-            Logout
+      {/* Top header bar */}
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold text-[var(--text)]">
+            <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--primary2)] bg-clip-text text-transparent">
+              לוח ניהול
+            </span>
+          </h1>
+          <Button variant="secondary" onClick={openExportModal} className="!h-9 !px-4 !text-sm">
+            ייצוא Excel
           </Button>
         </div>
-      </div>
+        <Button variant="ghost" onClick={handleLogout} className="!h-9 !px-4 !text-sm">
+          יציאה
+        </Button>
+      </header>
 
-      {/* Control Bar: Sell Price (left) + Init Inventory (right) */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <Card className="flex-1 sm:min-w-0">
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <p className="mb-1 text-xs text-[var(--muted)]">Current Sell Price (ILS per 1 USDT)</p>
-              <p dir="ltr" className="text-lg font-semibold text-[var(--text)]">
-                {appSettings?.sell_price_ils_per_usdt ?? '—'}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
+      {/* Price cards: side-by-side, Hebrew labels */}
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card className="p-5">
+          <p className="mb-1 text-sm font-medium text-[var(--muted)]">מחיר מכירה (אנחנו מוכרים USDT)</p>
+          <p dir="ltr" className="mb-3 text-xl font-semibold text-[var(--text)]">
+            {appSettings?.sell_price_ils_per_usdt ?? '—'}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <label className="mb-1 block text-xs text-[var(--muted)]">₪ לכל 1 USDT</label>
               <Input
                 type="number"
                 step="any"
@@ -655,43 +711,99 @@ export default function AdminDashboardPage() {
                 onChange={(e) => setSellPriceEdit(e.target.value)}
                 placeholder="0"
                 dir="ltr"
-                className="w-32"
+                className="w-full max-w-[140px]"
               />
-              <Button variant="primary" onClick={handleSellPriceSave} disabled={sellPriceSaving}>
-                {sellPriceSaving ? 'שומר…' : 'שמור'}
-              </Button>
             </div>
+            <Button variant="primary" onClick={handleSellPriceSave} disabled={sellPriceSaving} className="!h-9 mt-5">
+              {sellPriceSaving ? 'שומר…' : 'שמור'}
+            </Button>
           </div>
         </Card>
-        <div className="flex flex-wrap gap-2 shrink-0">
-          <Button variant="primary" onClick={() => setManualOrderModalOpen(true)}>
-            Add Manual Order
-          </Button>
-          <Button variant="secondary" onClick={() => setAddBatchModalOpen(true)}>
-            Add inventory batch
-          </Button>
-          <Button variant="secondary" onClick={() => setAdjustModalOpen(true)}>
-            התאמת מלאי
-          </Button>
-        </div>
-      </div>
+        <Card className="p-5">
+          <p className="mb-1 text-sm font-medium text-[var(--muted)]">מחיר קנייה (אנחנו קונים USDT)</p>
+          <p dir="ltr" className="mb-3 text-xl font-semibold text-[var(--text)]">
+            {appSettings?.buy_price_ils_per_usdt ?? '—'}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <label className="mb-1 block text-xs text-[var(--muted)]">₪ לכל 1 USDT</label>
+              <Input
+                type="number"
+                step="any"
+                min={0}
+                value={buyPriceEdit}
+                onChange={(e) => setBuyPriceEdit(e.target.value)}
+                placeholder="0"
+                dir="ltr"
+                className="w-full max-w-[140px]"
+              />
+            </div>
+            <Button variant="primary" onClick={handleBuyPriceSave} disabled={buyPriceSaving} className="!h-9 mt-5">
+              {buyPriceSaving ? 'שומר…' : 'שמור'}
+            </Button>
+          </div>
+        </Card>
+      </section>
 
-      {/* KPIs + Export */}
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <Button variant="secondary" onClick={openExportModal}>
-            Export Excel
+      {/* Actions: single row, grouped, Hebrew only; dangerous actions separated */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">הזמנות</span>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" onClick={() => setManualOrderModalOpen(true)} className="!h-9 !min-w-[200px]">
+              הזמנה חדשה (לקוח קונה USDT)
+            </Button>
+            <Button variant="primary" onClick={() => setSellOrderModalOpen(true)} className="!h-9 !min-w-[200px]">
+              הזמנה חדשה (לקוח מוכר USDT)
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">מלאי</span>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setAddBatchModalOpen(true)} className="!h-9 !min-w-[180px]">
+              הוספת מלאי (Batch)
+            </Button>
+            <Button variant="secondary" onClick={() => setAdjustModalOpen(true)} className="!h-9 !min-w-[140px]">
+              התאמת מלאי
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-[var(--border)]">
+          <Button
+            variant="ghost"
+            className="!h-9 !min-w-[140px] border border-red-500/50 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+            onClick={handleOpenResetSystemModal}
+            disabled={resetSystemLoading}
+          >
+            {resetSystemLoading ? 'מאפס…' : 'איפוס מערכת'}
           </Button>
         </div>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+      </section>
+
+      {/* Summary stats: Hebrew titles, responsive grid */}
+      <section>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <Card className="p-4 text-center">
-            <p className="text-xs text-[var(--muted)]">Inventory USDT</p>
+            <p className="text-xs text-[var(--muted)]">רווח כולל (USD)</p>
             <p dir="ltr" className="mt-1 text-xl font-semibold text-[var(--text)]">
-              {inventory?.usdt_balance ?? '—'}
+              {aggregates.totalProfitUsd.toFixed(2)}
             </p>
           </Card>
           <Card className="p-4 text-center">
-            <p className="text-xs text-[var(--muted)]">Average Cost (ILS/USDT)</p>
+            <p className="text-xs text-[var(--muted)]">רווח כולל (₪)</p>
+            <p dir="ltr" className="mt-1 text-xl font-semibold text-[var(--text)]">
+              {aggregates.totalProfitIls.toFixed(2)}
+            </p>
+          </Card>
+          <Card className="p-4 text-center">
+            <p className="text-xs text-[var(--muted)]">סה״כ נמכר (USDT)</p>
+            <p dir="ltr" className="mt-1 text-xl font-semibold text-[var(--text)]">
+              {aggregates.totalSoldUsdt}
+            </p>
+          </Card>
+          <Card className="p-4 text-center">
+            <p className="text-xs text-[var(--muted)]">עלות ממוצעת (₪/USDT)</p>
             <p dir="ltr" className="mt-1 text-xl font-semibold text-[var(--text)]">
               {inventory?.avg_cost_ils_per_usdt != null
                 ? parseFloat(inventory.avg_cost_ils_per_usdt.toFixed(3))
@@ -699,21 +811,9 @@ export default function AdminDashboardPage() {
             </p>
           </Card>
           <Card className="p-4 text-center">
-            <p className="text-xs text-[var(--muted)]">Total Sold (USDT)</p>
+            <p className="text-xs text-[var(--muted)]">מלאי (USDT)</p>
             <p dir="ltr" className="mt-1 text-xl font-semibold text-[var(--text)]">
-              {aggregates.totalSoldUsdt}
-            </p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-xs text-[var(--muted)]">Total Profit (ILS)</p>
-            <p dir="ltr" className="mt-1 text-xl font-semibold text-[var(--text)]">
-              {aggregates.totalProfitIls.toFixed(2)}
-            </p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-xs text-[var(--muted)]">Total Profit (USD)</p>
-            <p dir="ltr" className="mt-1 text-xl font-semibold text-[var(--text)]">
-              {aggregates.totalProfitUsd.toFixed(2)}
+              {inventory?.usdt_balance ?? '—'}
             </p>
           </Card>
         </div>
@@ -858,17 +958,17 @@ export default function AdminDashboardPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <Card className="relative w-full max-w-md p-6">
             <h3 className="mb-4 text-lg font-semibold text-[var(--text)]">
-              Add Manual Order
+              הזמנה חדשה (לקוח קונה USDT)
             </h3>
             <div className="space-y-4">
               <Input
-                label="Full name (required)"
+                label="שם מלא (חובה)"
                 value={manualOrderFullName}
                 onChange={(e) => setManualOrderFullName(e.target.value)}
-                placeholder="Customer name"
+                placeholder="שם הלקוח"
               />
               <Input
-                label="Phone (required)"
+                label="טלפון (חובה)"
                 value={manualOrderPhone}
                 onChange={(e) => setManualOrderPhone(e.target.value)}
                 placeholder="+972..."
@@ -881,7 +981,7 @@ export default function AdminDashboardPage() {
                 placeholder="תל אביב"
               />
               <Input
-                label="Amount USDT (required)"
+                label="כמות USDT (חובה)"
                 type="number"
                 step="any"
                 min={0}
@@ -892,7 +992,7 @@ export default function AdminDashboardPage() {
               />
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-                  Payment method
+                  אמצעי תשלום
                 </label>
                 <select
                   value={manualOrderPaymentMethod}
@@ -907,7 +1007,7 @@ export default function AdminDashboardPage() {
                 </select>
               </div>
               <Input
-                label="Notes (optional)"
+                label="הערות (אופציונלי)"
                 value={manualOrderNotes}
                 onChange={(e) => setManualOrderNotes(e.target.value)}
                 placeholder=""
@@ -915,10 +1015,85 @@ export default function AdminDashboardPage() {
             </div>
             <div className="mt-6 flex gap-3">
               <Button variant="primary" onClick={handleCreateManualOrder} disabled={manualOrderSaving}>
-                {manualOrderSaving ? 'Creating…' : 'Create order'}
+                {manualOrderSaving ? 'יוצר…' : 'צור הזמנה'}
               </Button>
               <Button variant="ghost" onClick={() => setManualOrderModalOpen(false)} disabled={manualOrderSaving}>
-                Cancel
+                ביטול
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Create SELL-USDT Order modal (customer sells to us) */}
+      {sellOrderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <Card className="relative w-full max-w-md p-6">
+            <h3 className="mb-4 text-lg font-semibold text-[var(--text)]">
+              הזמנה חדשה (לקוח מוכר USDT)
+            </h3>
+            <p className="mb-4 text-xs text-[var(--muted)]">
+              מחיר קנייה נוכחי: <span dir="ltr">{appSettings?.buy_price_ils_per_usdt ?? '—'} ₪/USDT</span>
+            </p>
+            <div className="space-y-4">
+              <Input
+                label="שם מלא (חובה)"
+                value={sellOrderFullName}
+                onChange={(e) => setSellOrderFullName(e.target.value)}
+                placeholder="שם הלקוח"
+              />
+              <Input
+                label="טלפון (חובה)"
+                value={sellOrderPhone}
+                onChange={(e) => setSellOrderPhone(e.target.value)}
+                placeholder="+972..."
+                dir="ltr"
+              />
+              <Input
+                label="עיר (חובה)"
+                value={sellOrderCity}
+                onChange={(e) => setSellOrderCity(e.target.value)}
+                placeholder="תל אביב"
+              />
+              <Input
+                label="כמות USDT (חובה)"
+                type="number"
+                step="any"
+                min={0}
+                value={sellOrderAmount}
+                onChange={(e) => setSellOrderAmount(e.target.value)}
+                placeholder="0"
+                dir="ltr"
+              />
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
+                  אמצעי תשלום
+                </label>
+                <select
+                  value={sellOrderPaymentMethod}
+                  onChange={(e) => setSellOrderPaymentMethod(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg1)] px-4 py-2.5 text-[var(--text)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                >
+                  {PAYMENT_OPTIONS.filter((o) => o.value !== '').map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Input
+                label="הערות (אופציונלי)"
+                value={sellOrderNotes}
+                onChange={(e) => setSellOrderNotes(e.target.value)}
+                placeholder=""
+              />
+            </div>
+            <div className="mt-6 flex gap-3">
+              <Button variant="primary" onClick={handleCreateSellOrder} disabled={sellOrderSaving}>
+                {sellOrderSaving ? 'יוצר…' : 'צור הזמנה'}
+              </Button>
+              <Button variant="ghost" onClick={() => setSellOrderModalOpen(false)} disabled={sellOrderSaving}>
+                ביטול
               </Button>
             </div>
           </Card>
@@ -930,13 +1105,13 @@ export default function AdminDashboardPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <Card className="relative w-full max-w-md p-6">
             <h3 className="mb-2 text-lg font-semibold text-red-400">
-              RESET SYSTEM
+              איפוס מערכת
             </h3>
             <p className="mb-4 text-sm text-[var(--muted)]">
-              This will permanently delete all orders, inventory ledger, and inventory state. This cannot be undone.
+              פעולה זו תמחק לצמיתות את כל ההזמנות, יומן המלאי ומצב המלאי. לא ניתן לשחזר.
             </p>
             <p className="mb-2 text-sm text-[var(--text)]">
-              Type <code className="rounded bg-red-500/20 px-1 py-0.5 font-mono text-red-300">{RESET_CONFIRM_PHRASE}</code> to confirm:
+              הקלד <code className="rounded bg-red-500/20 px-1 py-0.5 font-mono text-red-300" dir="ltr">{RESET_CONFIRM_PHRASE}</code> לאישור:
             </p>
             <Input
               value={resetSystemConfirmText}
@@ -950,12 +1125,12 @@ export default function AdminDashboardPage() {
                 variant="primary"
                 className="!bg-red-600 hover:!bg-red-500"
                 onClick={handleResetSystemExecute}
-                disabled={!resetSystemConfirmMatch || resetSystemLoading}
+                disabled={!resetSystemCanExecute || resetSystemLoading}
               >
-                {resetSystemLoading ? 'Resetting…' : 'Execute reset'}
+                {resetSystemLoading ? 'מאפס…' : 'בצע איפוס'}
               </Button>
               <Button variant="ghost" onClick={() => setResetSystemModalOpen(false)} disabled={resetSystemLoading}>
-                Cancel
+                ביטול
               </Button>
             </div>
           </Card>
@@ -967,13 +1142,13 @@ export default function AdminDashboardPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <Card className="relative w-full max-w-md p-6">
             <h3 className="mb-4 text-lg font-semibold text-[var(--text)]">
-              Complete Order …{shortId(completeModalOrder.id)}
+              השלמת הזמנה …{shortId(completeModalOrder.id)}
             </h3>
             <p className="mb-2 text-sm text-[var(--muted)]">
-              Amount: <span dir="ltr">{completeModalOrder.amount_usdt} USDT</span>
+              כמות: <span dir="ltr">{completeModalOrder.amount_usdt} USDT</span>
             </p>
             <p className="mb-4 text-sm text-[var(--text)]">
-              Sell Price: <span dir="ltr">{appSettings?.sell_price_ils_per_usdt ?? '—'} ILS/USDT</span>
+              מחיר מכירה: <span dir="ltr">{appSettings?.sell_price_ils_per_usdt ?? '—'} ₪/USDT</span>
             </p>
             <div className="mt-6 flex gap-3">
               <Button variant="primary" onClick={handleCompleteConfirm} disabled={completeSubmitting}>
@@ -993,34 +1168,33 @@ export default function AdminDashboardPage() {
 
       {/* Orders section */}
       <Card className="overflow-hidden">
-        <div className="border-b border-[var(--border)]/60 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)]/60 pb-4">
           <h2 className="text-lg font-semibold text-[var(--text)]">הזמנות</h2>
-          <p className="mt-0.5 text-sm text-[var(--muted)]">סינון וניהול הזמנות</p>
-        </div>
-        <div className="mt-4 flex flex-wrap items-end gap-4">
-          <div>
-            <label className="mb-1 block text-xs text-[var(--muted)]">Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-[var(--border)] bg-[var(--bg1)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
-            >
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value || 'all'} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-[var(--muted)]">אמצעי תשלום</label>
-            <select
-              value={paymentFilter}
-              onChange={(e) => setPaymentFilter(e.target.value)}
-              className="rounded-lg border border-[var(--border)] bg-[var(--bg1)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
-            >
-              {PAYMENT_OPTIONS.map((o) => (
-                <option key={o.value || 'all'} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <label className="mb-1 block text-xs text-[var(--muted)]">סטטוס</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg1)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+              >
+                {STATUS_OPTIONS.map((o) => (
+                  <option key={o.value || 'all'} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[var(--muted)]">אמצעי תשלום</label>
+              <select
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value)}
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg1)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+              >
+                {PAYMENT_OPTIONS.map((o) => (
+                  <option key={o.value || 'all'} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1036,8 +1210,8 @@ export default function AdminDashboardPage() {
                   <th className="pb-3 pl-2 pr-3 text-xs font-medium text-[var(--muted)]">עיר</th>
                   <th className="pb-3 pl-2 pr-3 text-xs font-medium text-[var(--muted)]">USDT</th>
                   <th className="pb-3 pl-2 pr-3 text-xs font-medium text-[var(--muted)]">תשלום</th>
-                  <th className="pb-3 pl-2 pr-3 text-xs font-medium text-[var(--muted)]">Status</th>
-                  <th className="pb-3 pl-2 pr-3 text-xs font-medium text-[var(--muted)]">Order ID</th>
+                  <th className="pb-3 pl-2 pr-3 text-xs font-medium text-[var(--muted)]">סטטוס</th>
+                  <th className="pb-3 pl-2 pr-3 text-xs font-medium text-[var(--muted)]">מזהה</th>
                   <th className="pb-3 pl-2 text-xs font-medium text-[var(--muted)]">פעולות</th>
                 </tr>
               </thead>
@@ -1064,10 +1238,10 @@ export default function AdminDashboardPage() {
                         {row.amount_usdt ?? '—'}
                       </td>
                       <td className="py-3.5 pl-2 pr-3 text-sm text-[var(--text)]">
-                        {row.payment_method ?? '—'}
+                        {paymentDisplayLabel(row.payment_method)}
                       </td>
                       <td className="py-3.5 pl-2 pr-3 text-sm text-[var(--text)]">
-                        {row.status ?? '—'}
+                        {statusDisplayLabel(row.status)}
                       </td>
                       <td dir="ltr" className="py-3.5 pl-2 pr-3 text-sm font-mono text-[var(--primary)]">
                         …{shortId(row.id)}
@@ -1080,7 +1254,7 @@ export default function AdminDashboardPage() {
                               className="!py-1.5 !px-3 !text-xs"
                               onClick={() => setCompleteModalOrder(row)}
                             >
-                              Complete
+                              סיים
                             </Button>
                             <Button
                               variant="ghost"
@@ -1088,7 +1262,7 @@ export default function AdminDashboardPage() {
                               onClick={() => handleCancelOrder(row)}
                               disabled={cancellingId === row.id}
                             >
-                              {cancellingId === row.id ? '…' : 'Cancel'}
+                              {cancellingId === row.id ? '…' : 'בטל'}
                             </Button>
                             <Button
                               variant="ghost"
@@ -1096,7 +1270,7 @@ export default function AdminDashboardPage() {
                               onClick={() => handleDeleteOrder(row)}
                               disabled={deletingId === row.id}
                             >
-                              {deletingId === row.id ? '…' : 'Delete'}
+                              {deletingId === row.id ? '…' : 'מחק'}
                             </Button>
                           </div>
                         )}

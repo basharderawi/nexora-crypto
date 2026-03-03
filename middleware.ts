@@ -19,7 +19,15 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const pathname = request.nextUrl.pathname;
+  if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/admin/login', request.url));
+    }
+  }
+
   return response;
 }
 

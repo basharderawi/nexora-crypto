@@ -11,7 +11,6 @@ import { Input, Textarea } from '@/components/ui/Input';
 
 const BUSINESS_WHATSAPP_PHONE = '972542146657';
 
-/** Remove non-digits; Israel: 05XXXXXXXX -> 9725XXXXXXXX, otherwise leave as is. */
 function normalizePhoneToE164Digits(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('0')) {
@@ -37,7 +36,7 @@ const PAYMENT_OPTIONS = [
 
 const PHONE_ERROR = 'נא להזין מספר טלפון תקין';
 
-const orderSchema = z.object({
+const sellOrderSchema = z.object({
   full_name: z.string().min(1, 'שם מלא חובה'),
   city: z.string().min(1, 'עיר חובה'),
   phone: z
@@ -51,24 +50,24 @@ const orderSchema = z.object({
   notes: z.string().optional(),
 });
 
-type OrderFormData = z.infer<typeof orderSchema>;
+type SellOrderFormData = z.infer<typeof sellOrderSchema>;
 
-export default function OrderPage() {
+export default function SellPage() {
   const {
     register,
     handleSubmit,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<OrderFormData>({
-    resolver: zodResolver(orderSchema),
+  } = useForm<SellOrderFormData>({
+    resolver: zodResolver(sellOrderSchema),
     defaultValues: {
       payment_method: 'BIT',
     },
   });
 
-  const [submittedData, setSubmittedData] = useState<OrderFormData | null>(null);
+  const [submittedData, setSubmittedData] = useState<SellOrderFormData | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
-  const [sellPrice, setSellPrice] = useState<number | null>(null);
+  const [buyPrice, setBuyPrice] = useState<number | null>(null);
   const [whatsAppRedirectUrl, setWhatsAppRedirectUrl] = useState<string | null>(null);
 
   const amountUsdt = watch('amount_usdt');
@@ -77,16 +76,16 @@ export default function OrderPage() {
     (async () => {
       try {
         const { supabase } = await import('@/lib/supabaseClient');
-        const { data: settingsRow } = await supabase.from('app_settings').select('sell_price_ils_per_usdt').eq('id', 1).single();
-        const val = (settingsRow as { sell_price_ils_per_usdt?: number } | null)?.sell_price_ils_per_usdt;
-        setSellPrice(typeof val === 'number' ? val : val != null ? parseFloat(String(val)) : null);
+        const { data: settingsRow } = await supabase.from('app_settings').select('buy_price_ils_per_usdt').eq('id', 1).single();
+        const val = (settingsRow as { buy_price_ils_per_usdt?: number } | null)?.buy_price_ils_per_usdt;
+        setBuyPrice(typeof val === 'number' ? val : val != null ? parseFloat(String(val)) : null);
       } catch {
-        setSellPrice(null);
+        setBuyPrice(null);
       }
     })();
   }, []);
 
-  async function onSubmit(data: OrderFormData) {
+  async function onSubmit(data: SellOrderFormData) {
     try {
       const payload = {
         full_name: data.full_name,
@@ -95,9 +94,8 @@ export default function OrderPage() {
         amount_usdt: data.amount_usdt,
         payment_method: data.payment_method,
         notes: data.notes || null,
-        status: 'new',
       };
-      const res = await fetch('/api/orders', {
+      const res = await fetch('/api/sell-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -105,8 +103,8 @@ export default function OrderPage() {
       const resData = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        console.error('Order API error:', res.status, resData);
-        const errorMessage = resData?.message ?? resData?.error ?? 'Order creation failed';
+        console.error('Sell order API error:', res.status, resData);
+        const errorMessage = resData?.message ?? resData?.error ?? 'יצירת הבקשה נכשלה';
         toast.error(errorMessage);
         throw new Error(errorMessage);
       }
@@ -114,11 +112,12 @@ export default function OrderPage() {
       const createdOrderId = resData?.id ?? null;
       setSubmittedData(data);
       if (createdOrderId) setOrderId(createdOrderId);
-      toast.success('ההזמנה נוצרה בהצלחה');
+      toast.success('בקשת המכירה נשלחה בהצלחה');
 
       const paymentLabel = PAYMENT_OPTIONS.find((o) => o.value === data.payment_method)?.label ?? data.payment_method;
       const notesText = data.notes?.trim() || 'ללא';
-      const message = `🟢 הזמנה חדשה - Nexora Crypto
+      const buyPriceVal = buyPrice ?? 0;
+      const message = `🟢 בקשת מכירה (הלקוח מוכר USDT)
 
 🧾 מספר הזמנה: ${createdOrderId ?? '-'}
 
@@ -128,6 +127,8 @@ export default function OrderPage() {
 
 💵 כמות USDT: ${data.amount_usdt}
 💳 אמצעי תשלום: ${paymentLabel}
+
+💰 מחיר קנייה (₪ לכל 1 USDT): ${buyPriceVal}
 
 📝 הערות:
 ${notesText}`;
@@ -145,21 +146,20 @@ ${notesText}`;
         window.location.href = url;
       }
     } catch (err: unknown) {
-      console.error('Order submit error:', err);
+      console.error('Sell order submit error:', err);
       const isMissingEnv =
         err instanceof Error &&
         /missing.*supabase|NEXT_PUBLIC_SUPABASE/i.test(err.message);
-      const message =
+      const msg =
         isMissingEnv
           ? 'Missing Supabase env'
           : (err && typeof err === 'object' && 'message' in err && typeof (err as Error).message === 'string')
             ? (err as Error).message
-            : 'יצירת ההזמנה נכשלה';
-      toast.error(message);
+            : 'יצירת בקשת המכירה נכשלה';
+      toast.error(msg);
     }
   }
 
-  // Success screen with fallback "Open WhatsApp" link (wa.me works on desktop → Web, mobile → app)
   if (submittedData) {
     const copyOrderId = () => {
       if (orderId) {
@@ -188,7 +188,7 @@ ${notesText}`;
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h2 className="text-xl font-semibold text-[var(--text)]">ההזמנה נוצרה בהצלחה</h2>
+            <h2 className="text-xl font-semibold text-[var(--text)]">בקשת המכירה נשלחה בהצלחה</h2>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               <span className="rounded-full border border-[var(--border)] bg-[var(--bg1)] px-3 py-1.5 text-sm font-medium text-[var(--primary)]">
                 הבקשה נשלחה
@@ -239,31 +239,21 @@ ${notesText}`;
     );
   }
 
-  // Form
   return (
     <div className="mx-auto max-w-[560px]">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-[var(--text)]">
           <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--primary2)] bg-clip-text text-transparent">
-            קניית USDT
+            מכירת USDT
           </span>
         </h1>
-        <p className="mt-2 text-[var(--muted)]">מלא פרטים כדי לקנות USDT</p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <ButtonLink
-            href="/sell"
-            variant="secondary"
-            className="min-w-[160px] px-5 py-2.5 text-sm font-medium focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg0)]"
-          >
-            מכירת USDT
-          </ButtonLink>
-        </div>
+        <p className="mt-2 text-[var(--muted)]">מלא פרטים כדי למכור USDT אלינו</p>
       </div>
 
       <Card>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <CardTitle className="mb-4 border-b border-[var(--border)] pb-3">
-            פרטי ההזמנה
+            פרטי בקשת המכירה
           </CardTitle>
 
           <Input
@@ -296,23 +286,22 @@ ${notesText}`;
             error={errors.amount_usdt?.message}
           />
 
-          {/* Price preview */}
           <div className="rounded-lg border border-[var(--border)] bg-[var(--card)]/50 p-4 backdrop-blur-sm">
-            {sellPrice != null && sellPrice > 0 ? (
+            {buyPrice != null && buyPrice >= 0 ? (
               <>
                 <p className="text-sm text-[var(--muted)]">
-                  הערכת תשלום: <span dir="ltr" className="font-semibold text-[var(--primary)]">₪ {(() => {
+                  הערכת תקבול: <span dir="ltr" className="font-semibold text-[var(--primary)]">₪ {(() => {
                     const amount = typeof amountUsdt === 'string' ? parseFloat(amountUsdt) : amountUsdt;
-                    const num = Number.isNaN(amount) || amount <= 0 ? 0 : amount * sellPrice;
+                    const num = Number.isNaN(amount) || amount <= 0 ? 0 : amount * buyPrice;
                     return num.toFixed(2);
                   })()}</span>
                 </p>
                 <p className="mt-1 text-xs text-[var(--muted)]">
-                  מחיר מכירה נוכחי: <span dir="ltr">{sellPrice} ₪ / 1 USDT</span>
+                  מחיר קנייה נוכחי: <span dir="ltr">{buyPrice} ₪ / 1 USDT</span>
                 </p>
               </>
             ) : (
-              <p className="text-sm text-[var(--muted)]">לא הוגדר מחיר מכירה כרגע</p>
+              <p className="text-sm text-[var(--muted)]">לא הוגדר מחיר קנייה כרגע</p>
             )}
           </div>
 
@@ -349,7 +338,7 @@ ${notesText}`;
 
           <div className="flex justify-start pt-2">
             <Button type="submit" variant="primary" disabled={isSubmitting}>
-              {isSubmitting ? 'שולח…' : 'שליחת הזמנה'}
+              {isSubmitting ? 'שולח…' : 'שליחת בקשת מכירה'}
             </Button>
           </div>
         </form>

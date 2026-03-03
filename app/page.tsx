@@ -38,20 +38,33 @@ export default function HomePage() {
         <p className="relative max-w-lg text-lg text-[var(--muted)] md:text-xl">
           מהירות · אמינות · שירות מקצועי
         </p>
-        <div className="relative mt-8 flex flex-col items-center gap-4 sm:flex-row sm:gap-5">
-          <ButtonLink
-            href="/order"
-            variant="primary"
-            className="min-w-[200px] px-8 py-3.5 text-base font-semibold focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg0)]"
-          >
-            יצירת הזמנה
-          </ButtonLink>
+        <div className="relative mt-8 flex flex-col items-center gap-6 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-8">
+          <div className="flex flex-col items-center gap-1">
+            <ButtonLink
+              href="/order"
+              variant="primary"
+              className="min-w-[200px] px-8 py-3.5 text-base font-semibold focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg0)]"
+            >
+              קניית USDT
+            </ButtonLink>
+            <p className="text-xs text-[var(--muted)]">אתם קונים USDT מאיתנו</p>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <ButtonLink
+              href="/sell"
+              variant="secondary"
+              className="min-w-[200px] px-8 py-3.5 text-base font-semibold focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg0)]"
+            >
+              מכירת USDT
+            </ButtonLink>
+            <p className="text-xs text-[var(--muted)]">אתם מוכרים לנו USDT</p>
+          </div>
           <ButtonLink
             href="/admin/login"
             variant="ghost"
             className="min-w-[140px] px-5 py-2.5 text-sm text-[var(--muted)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg0)]"
           >
-            Admin Login
+            כניסת מנהל
           </ButtonLink>
         </div>
       </section>

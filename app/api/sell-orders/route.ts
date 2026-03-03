@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-const orderBodySchema = z.object({
+const sellOrderBodySchema = z.object({
   full_name: z.string().min(1, 'full_name required'),
   city: z.string().min(1, 'city required'),
   phone: z.string().min(1, 'phone required').refine((v) => v.replace(/\D/g, '').length >= 9, 'invalid phone'),
@@ -15,9 +15,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     if (process.env.NODE_ENV === 'development') {
-      console.error('ORDER_API_BODY', body);
+      console.error('SELL_ORDER_API_BODY', body);
     }
-    const parsed = orderBodySchema.safeParse(body);
+    const parsed = sellOrderBodySchema.safeParse(body);
     if (!parsed.success) {
       const flatten = parsed.error.flatten();
       return NextResponse.json(
@@ -29,11 +29,11 @@ export async function POST(request: NextRequest) {
 
     const { data: settingsRow } = await supabaseAdmin
       .from('app_settings')
-      .select('sell_price_ils_per_usdt')
+      .select('buy_price_ils_per_usdt')
       .eq('id', 1)
       .maybeSingle();
-    const sell_price_ils_per_usdt =
-      (settingsRow as { sell_price_ils_per_usdt?: number } | null)?.sell_price_ils_per_usdt ?? null;
+    const buy_price_ils_per_usdt =
+      (settingsRow as { buy_price_ils_per_usdt?: number } | null)?.buy_price_ils_per_usdt ?? 0;
 
     const { data: inserted, error } = await supabaseAdmin
       .from('orders')
@@ -45,14 +45,14 @@ export async function POST(request: NextRequest) {
         payment_method,
         notes: notes ?? null,
         status: 'new',
-        side: 'SELL',
-        sell_price_ils_per_usdt,
+        side: 'BUY',
+        buy_price_ils_per_usdt,
       }] as any)
       .select()
       .single();
 
     if (error) {
-      console.error('ORDER_INSERT_ERROR', error);
+      console.error('SELL_ORDER_INSERT_ERROR', error);
       return NextResponse.json(
         {
           error: 'DB insert failed',
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ id });
   } catch (e) {
-    console.error('[api/orders] error:', e);
+    console.error('[api/sell-orders] error:', e);
     return NextResponse.json(
       {
         error: 'Server error',

@@ -43,10 +43,6 @@ export type DatabaseFunctions = {
     Args: { p_order_id: string; p_sell_price: number; p_usd_ils_rate: number | null };
     Returns: unknown;
   };
-  reset_all_data: {
-    Args: Record<string, never>;
-    Returns: unknown;
-  };
 };
 
 /** Extend this with your database schema types when ready */

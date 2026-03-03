@@ -6,8 +6,9 @@ import type { Database } from '@/lib/supabaseClient';
  * Bypasses RLS. Use only in API routes or server code — never expose to the client.
  */
 function getSupabaseAdmin(): ReturnType<typeof createClient<Database>> {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL)?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  console.log('SUPABASE_URL_USED:', process.env.SUPABASE_URL);
   if (!url || !serviceRoleKey) {
     throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
   }
